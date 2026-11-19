@@ -121,7 +121,6 @@ jobs:
             echo "::error::No migrations were recorded on the fresh database."
             exit 1
           fi
-=======
 
   # Issue #475: lint new or changed migrations with squawk so table-locking
   # DDL (non-concurrent index builds, constraints without NOT VALID, column
@@ -228,6 +227,8 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Check sensitive logging
         run: python3 scripts/check_sensitive_logging.py
+      - name: Test sensitive logging lint fixtures
+        run: python3 scripts/test_check_sensitive_logging.py
       - name: Check .env.example covers every env var
         run: python3 scripts/check_env_example.py
       - name: Install sqlx-cli

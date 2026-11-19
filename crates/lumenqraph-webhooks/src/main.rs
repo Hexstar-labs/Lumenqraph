@@ -31,7 +31,10 @@ async fn main() -> anyhow::Result<()> {
     // Every numeric setting is validated here too: an invalid value exits with
     // a message naming the variable instead of silently using the default.
     let config = Config::from_env()?;
-    info!(config = ?config, "effective configuration");
+    info!(
+        config = ?config, // sensitive-log-ok: Config's Debug impl redacts DB, RPC and webhook secrets
+        "effective configuration"
+    );
     let db = lumenqraph_core::db::DbConfig { max_connections: config.db_max_connections, min_connections: config.db_min_connections, acquire_timeout_secs: config.db_acquire_timeout_secs, idle_timeout_secs: config.db_idle_timeout_secs, connect_retries: config.db_connect_retries };
     let pool = lumenqraph_core::db::connect_with_retry(&config.database_url, &db).await?;
 
