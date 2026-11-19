@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::error::{ApiError, ApiResult};
-use crate::key_cache::CachedKey;
+use crate::key_cache::{is_plausible_key, CachedKey};
 use crate::state::{AppState, AuditEvent};
 
 /// SHA-256 hex of an API key. Used both here and by the key-generation script.
@@ -232,6 +232,12 @@ async fn resolve_key(
     route: &str,
     method: &str,
 ) -> Result<ResolvedKey, ApiError> {
+    // --- Shape check (#649) ---
+    // A key we never issue can't match a row, so refuse it before hashing, the
+    // cache or the database. Random-key floods then cost no DB work at all.
+    if !is_plausible_key(key) {
+        return Err(ApiError::unauthorized("invalid API key"));
+    }
     let hash = hash_key(key);
 
     // --- Cache look-up (#430) ---
@@ -1088,14 +1094,14 @@ pub(crate) mod integration_tests {
             "INSERT INTO api_keys (key_hash, revoked, rate_limit_per_min, created_at, expires_at)
              VALUES ($1, false, 100, NOW(), NOW() - interval '1 minute')",
         )
-        .bind(hash_key("expired-key"))
+        .bind(hash_key("lqk_expired_key"))
         .execute(&pool)
         .await
         .expect("insert expired api key");
         let base = spawn_server(make_state(pool, true, 60)).await;
         let res = reqwest::Client::new()
             .get(format!("{base}/contracts"))
-            .header("x-api-key", "expired-key")
+            .header("x-api-key", "lqk_expired_key")
             .send()
             .await
             .unwrap();
@@ -1108,11 +1114,11 @@ pub(crate) mod integration_tests {
     #[ignore = "needs postgres"]
     async fn read_only_key_cannot_create_webhook() {
         let pool = db_pool().await;
-        insert_api_key_with_scopes(&pool, "read-only-key", &["read"]).await;
+        insert_api_key_with_scopes(&pool, "lqk_read_only_key", &["read"]).await;
         let base = spawn_server(make_state(pool.clone(), true, 60)).await;
         let res = reqwest::Client::new()
             .post(format!("{base}/webhooks"))
-            .header("x-api-key", "read-only-key")
+            .header("x-api-key", "lqk_read_only_key")
             .json(&serde_json::json!({
                 "url": "https://example.com/hook",
                 "events": ["contract_call"]
@@ -1146,12 +1152,12 @@ pub(crate) mod integration_tests {
     #[ignore = "needs postgres"]
     async fn valid_key_via_x_api_key_header_allows_request() {
         let pool = db_pool().await;
-        insert_api_key(&pool, "good-key", false).await;
+        insert_api_key(&pool, "lqk_good_key", false).await;
         let base = spawn_server(make_state(pool, true, 60)).await;
         let client = reqwest::Client::new();
         let res = client
             .get(format!("{base}/contracts"))
-            .header("x-api-key", "good-key")
+            .header("x-api-key", "lqk_good_key")
             .send()
             .await
             .unwrap();
@@ -1162,12 +1168,12 @@ pub(crate) mod integration_tests {
     #[ignore = "needs postgres"]
     async fn valid_key_via_bearer_header_allows_request() {
         let pool = db_pool().await;
-        insert_api_key(&pool, "bearer-key", false).await;
+        insert_api_key(&pool, "lqk_bearer_key", false).await;
         let base = spawn_server(make_state(pool, true, 60)).await;
         let client = reqwest::Client::new();
         let res = client
             .get(format!("{base}/contracts"))
-            .header("Authorization", "Bearer bearer-key")
+            .header("Authorization", "Bearer lqk_bearer_key")
             .send()
             .await
             .unwrap();
@@ -1178,12 +1184,12 @@ pub(crate) mod integration_tests {
     #[ignore = "needs postgres"]
     async fn revoked_key_returns_401() {
         let pool = db_pool().await;
-        insert_api_key(&pool, "revoked-key", true).await;
+        insert_api_key(&pool, "lqk_revoked_key", true).await;
         let base = spawn_server(make_state(pool, true, 60)).await;
         let client = reqwest::Client::new();
         let res = client
             .get(format!("{base}/contracts"))
-            .header("x-api-key", "revoked-key")
+            .header("x-api-key", "lqk_revoked_key")
             .send()
             .await
             .unwrap();
@@ -1198,7 +1204,7 @@ pub(crate) mod integration_tests {
         let client = reqwest::Client::new();
         let res = client
             .get(format!("{base}/contracts"))
-            .header("x-api-key", "completely-unknown-key")
+            .header("x-api-key", "lqk_completely_unknown_key")
             .send()
             .await
             .unwrap();
@@ -1268,12 +1274,12 @@ pub(crate) mod integration_tests {
     #[ignore = "needs postgres"]
     async fn authenticated_webhook_create_stores_owner_key_hash() {
         let pool = db_pool().await;
-        insert_api_key_with_scopes(&pool, "owner-key", &["webhooks:write"]).await;
+        insert_api_key_with_scopes(&pool, "lqk_owner_key", &["webhooks:write"]).await;
         let base = spawn_server(make_state(pool.clone(), true, 60)).await;
         let client = reqwest::Client::new();
         let res = client
             .post(format!("{base}/webhooks"))
-            .header("x-api-key", "owner-key")
+            .header("x-api-key", "lqk_owner_key")
             .json(&serde_json::json!({
                 "url": "https://example.com/hook",
                 "events": ["contract_call"]
@@ -1291,7 +1297,7 @@ pub(crate) mod integration_tests {
                 .fetch_one(&pool)
                 .await
                 .expect("fetch owner_key_hash");
-        assert_eq!(owner.as_deref(), Some(hash_key("owner-key").as_str()));
+        assert_eq!(owner.as_deref(), Some(hash_key("lqk_owner_key").as_str()));
     }
 
     #[tokio::test]
