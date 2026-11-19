@@ -11,7 +11,7 @@
 
 use axum::extract::{Extension, Path, Query, State};
 use axum::response::Response;
-use axum::{Extension, Json};
+use axum::Json;
 use lumenqraph_core::WebhookSubscription;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};

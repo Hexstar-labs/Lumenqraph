@@ -114,9 +114,6 @@ pub struct ApiConfig {
     /// Retention for delivered/failed webhook deliveries. `0` disables pruning.
     pub webhook_delivery_retention_days: i64,
 
-    /// `pgp_sym_encrypt` key for webhook secrets. `None` falls back to the
-    /// legacy insecure test key (a warning is logged at startup).
-    pub webhook_encryption_key: Option<String>,
 
 
     /// Sibling instances mounted under a path prefix (`INSTANCE_MOUNTS`).
@@ -298,8 +295,6 @@ impl ApiConfig {
             webhook_encryption_key: "test-only-webhook-key".into(),
             webhook_delivery_retention_days: 14,
 
-            webhook_encryption_key: None,
-
             mounts: Vec::new(),
             proxy: ProxyConfig::default(),
         }
@@ -344,16 +339,10 @@ impl fmt::Debug for ApiConfig {
             .field("api_key_cache_ttl_secs", &self.api_key_cache_ttl_secs)
             .field("api_key_cache_neg_ttl_secs", &self.api_key_cache_neg_ttl_secs)
             .field("graphql", &self.graphql)
-
             .field("webhook_encryption_key", &"[REDACTED]")
             .field(
                 "webhook_delivery_retention_days",
                 &self.webhook_delivery_retention_days,
-
-            .field(
-                "webhook_encryption_key",
-                &self.webhook_encryption_key.as_ref().map(|_| "[REDACTED]"),
-
             )
             .field("mounts", &self.mounts)
             .field("proxy", &self.proxy)
